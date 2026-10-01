@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         X 媒体网格 - 完整显示图片（不裁切）
 // @namespace    https://github.com/LiSeafood/x-media-fullview
-// @version      7.0
-// @description  X/Twitter 个人页媒体网格默认显示完整图片（contain，留黑边），不再被正方形裁切。纯 CSS + URL 门控方案，免疫 React 重渲染与 SPA 路由；@match 全站以支持从任意页面 SPA 进入媒体页。
+// @version      7.1
+// @description  X/Twitter 个人页媒体网格显示完整图片（不裁切，按原始比例）；无视频作者的媒体页自动跳转照片筛选。纯 CSS + URL 门控方案，免疫 React 重渲染与 SPA 路由；@match 全站以支持从任意页面 SPA 进入媒体页。
 // @author       LiSeafood
 // @match        https://x.com/*
 // @match        https://twitter.com/*
@@ -60,6 +60,62 @@ html[data-xmv-fullview] [data-testid="cellInnerDiv"] video {
     function isMediaGridPage() {
         return /^\/[^/]+\/media/.test(location.pathname);
     }
+
+    // 3) SPA 路由监听：钩子保证即时切换，interval 兜底防漏。
+    const listeners = [];
+    function onUpdate(fn) { listeners.push(fn); }
+    ['pushState', 'replaceState'].forEach(function (name) {
+        const orig = history[name];
+        if (typeof orig !== 'function') return;
+        history[name] = function () {
+            const ret = orig.apply(this, arguments);
+            listeners.forEach(function (fn) { fn(); });
+            return ret;
+        };
+    });
+    window.addEventListener('popstate', () => listeners.forEach(fn => fn()));
+    window.addEventListener('hashchange', () => listeners.forEach(fn => fn()));
+
+    // 4) 无视频作者自动跳转照片筛选：
+    //    点开"媒体"标签页时 X 默认展示视频；若出现空状态（该作者没有视频），
+    //    自动通过 X 自己的筛选菜单（SPA 方式）跳到照片页。
+    //    只在 URL 不带 filter 参数时触发——用户显式选了筛选（哪怕选的是视频）绝不干预。
+    let lastUrlKey = null;
+    let jumpDone = false;
+    function maybeAutoJump() {
+        if (!/^\/[^/]+\/media$/.test(location.pathname)) return;
+        const urlKey = location.pathname + location.search;
+        if (urlKey !== lastUrlKey) { lastUrlKey = urlKey; jumpDone = false; }
+        if (jumpDone) return;
+        if (location.search.indexOf('filter=') !== -1) { jumpDone = true; return; }
+        // 空状态出现（X 已确认该作者没有视频）且网格里没有任何瓦片才动手
+        if (!document.querySelector('[data-testid="emptyState"]')) return;
+        if (document.querySelector('[data-testid="cellInnerDiv"] div[style*="background-image"], [data-testid="cellInnerDiv"] video')) { jumpDone = true; return; }
+        jumpToPhotos();
+    }
+    function jumpToPhotos() {
+        jumpDone = true;
+        const tabBtn = document.querySelector('[role="tab"][aria-selected="true"][aria-haspopup="menu"]');
+        const tabText = tabBtn ? (tabBtn.textContent || '').trim() : '';
+        if (!tabBtn) { location.replace(location.pathname + '?filter=photo'); return; }
+        tabBtn.click(); // 打开筛选菜单
+        setTimeout(function () {
+            const items = Array.prototype.slice.call(document.querySelectorAll('[role="menuitem"]'));
+            // 菜单恰有两项：当前筛选（与标签同名）与另一项（照片）。取文字不同的那个，兼容多语言。
+            const target = items.length === 2
+                ? items.find(function (i) { return (i.textContent || '').trim() !== tabText; })
+                : null;
+            if (!target) { location.replace(location.pathname + '?filter=photo'); return; }
+            target.click();
+            // 兜底：2 秒后 URL 仍无 filter=photo（SPA 点击没生效）就整页跳转
+            setTimeout(function () {
+                if (location.search.indexOf('filter=photo') === -1 && /^\/[^/]+\/media$/.test(location.pathname)) {
+                    location.replace(location.pathname + '?filter=photo');
+                }
+            }, 2000);
+        }, 350);
+    }
+
     function update() {
         const root = document.documentElement;
         if (!root) return;
@@ -68,20 +124,9 @@ html[data-xmv-fullview] [data-testid="cellInnerDiv"] video {
         } else {
             root.removeAttribute('data-xmv-fullview');
         }
+        maybeAutoJump();
     }
 
-    // 3) SPA 路由监听：钩子保证即时切换，interval 兜底防漏。
-    ['pushState', 'replaceState'].forEach(function (name) {
-        const orig = history[name];
-        if (typeof orig !== 'function') return;
-        history[name] = function () {
-            const ret = orig.apply(this, arguments);
-            update();
-            return ret;
-        };
-    });
-    window.addEventListener('popstate', update);
-    window.addEventListener('hashchange', update);
     setInterval(update, 300);
     update();
 })();

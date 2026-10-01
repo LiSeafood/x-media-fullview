@@ -1,6 +1,22 @@
 # X Media Full View · X 媒体网格完整显示
 
-Tampermonkey 油猴脚本：让 X（Twitter）个人主页媒体标签页（`https://x.com/<用户名>/media`）的图片缩略图**完整显示**（contain，两侧留黑边），不再被默认的正方形裁切挡住全貌——一眼预览整张图，不用一张张点开。
+Tampermonkey 油猴脚本：让 X（Twitter）个人主页媒体标签页（`https://x.com/<用户名>/media`）的图片缩略图**按原始比例完整显示**，不再被默认的正方形裁切挡住全貌——一眼预览整张图，不用一张张点开。
+
+## 效果图示
+
+| 默认（正方形裁切，只看到局部） | 安装后（完整显示） |
+| --- | --- |
+| ![Before：正方形裁切](assets/before.png) | ![After：完整显示](assets/after.png) |
+
+竖图两侧留边、横图上下留边，每张图都完整可见。
+
+## 功能特性
+
+- 网格保持 X 原生排布，图片按原始比例完整显示：竖图两侧留边、横图上下留边；
+- **无视频作者自动跳转照片**：点开"媒体"标签页时 X 默认展示视频筛选；如果该作者没有发布过视频，脚本会自动跳转到照片页，不用再手动切换（作者有视频时不干预，保持 X 原生行为）；
+- 点击看大图、悬停变暗、滚动无限加载均不受影响；
+- GIF / 视频缩略图同样完整显示；
+- 仅在 `/用户名/media` 页面生效，其余页面零改动。
 
 ## 安装
 
@@ -10,28 +26,14 @@ Tampermonkey 油猴脚本：让 X（Twitter）个人主页媒体标签页（`htt
 
 > 手动安装：复制 [x-media-fullview.user.js](x-media-fullview.user.js) 全部内容 → Tampermonkey 管理面板 → 「添加新脚本」→ 粘贴并保存。
 
-## 效果与行为
+## 更新日志
 
-- 网格保持 X 原生的三列正方形排布，每格内图片以 contain 方式完整显示；
-- 点击看大图、悬停变暗、滚动无限加载均不受影响；
-- 仅在 `/用户名/media` 页面生效（含 `?filter=photo` / 视频筛选），其余页面零改动；
-- GIF / 视频缩略图同样完整显示。
-
-## 为什么网上同类脚本"时灵时不灵"？
-
-基于 2026-10 对 X 前端真实 DOM 的实测，发现了两个坑，本脚本针对性解决：
-
-**1. 裁切根本不是 `<img>` 干的。**
-媒体网格每个瓦片里叠了两层：上层 `<img>` 是隐形的（`opacity: 0; z-index: -1`），真正可见的是下面带内联 `background-image` 的 div，正方形裁切来自它的 `background-size: cover`。只改 `img` 的 `object-fit` 碰的是看不见的层，白改。
-
-**2. `@match` 写窄导致脚本根本没在运行。**
-X 是单页应用（SPA）：如果脚本只 `@match https://x.com/*/media*`，那么只有"标签页第一次加载的网址恰好是媒体页"时脚本才会被注入；从主页或其他页面点进媒体页不会重新加载页面，脚本完全不在场。这就是"有的作者一点就生效、有的怎么都不生效"的真相——和作者无关，和你**从哪里进入**有关。
-
-**本脚本的做法**：`@match` 全站常驻 + URL 门控（检测到 `/用户名/media` 才启用）+ 一段静态 `!important` CSS（背景图层、img、video 三种形态全部压制）。没有 MutationObserver、没有逐元素内联样式——React 重渲染抹不掉，新加载的瓦片自动命中规则。
+- **v7.1**：新增"无视频作者自动跳转照片筛选"（SPA 方式跳转，带兜底）。
+- **v7.0**：重构为纯 CSS + URL 门控方案，根治"时灵时不灵"。
 
 ## 兼容性说明
 
-脚本基于 2026-10 实测的 X 前端 DOM（`data-testid="cellInnerDiv"`、内联 `background-image`、`/photo/` 链接等稳定特征编写，不依赖随版本变化的 `.r-xxxx` 原子类名）。X 改版可能导致失效，欢迎提 [issue](https://github.com/LiSeafood/x-media-fullview/issues)。
+脚本基于 2026-10 实测的 X 前端 DOM（`data-testid="cellInnerDiv"`、内联 `background-image`、`data-testid="emptyState"` 等稳定特征编写，不依赖随版本变化的 `.r-xxxx` 原子类名）。X 改版可能导致失效，欢迎提 [issue](https://github.com/LiSeafood/x-media-fullview/issues)。
 
 ## License
 
